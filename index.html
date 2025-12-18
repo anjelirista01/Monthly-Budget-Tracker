@@ -1,0 +1,334 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Daily Budget Tracker</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background: #ffeaf7; /* Warna dasar diubah */
+            color: #732839; /* Warna tulisan diubah */
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+        .container {
+            max-width: 800px;
+            width: 100%;
+            background: rgba(255, 255, 255, 0.1);
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.3);
+        }
+        h1 {
+            text-align: center;
+            margin-bottom: 20px;
+        }
+        form {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+        input, select, button {
+            padding: 10px;
+            border: none;
+            border-radius: 5px;
+            font-size: 16px;
+        }
+        button {
+            background:#BF2A52 ;
+            color: white;
+            cursor: pointer;
+            transition: background 0.3s;
+        }
+        button:hover {
+            background: #BF2A52;
+        }
+        .balance {
+            text-align: center;
+            font-size: 24px;
+            margin: 20px 0;
+        }
+        .warning {
+            color: #ff0000;
+            font-weight: bold;
+            display: none;
+        }
+        .transactions {
+            margin-top: 20px;
+        }
+        ul {
+            list-style: none;
+            padding: 0;
+        }
+        li {
+            padding: 10px;
+            margin: 5px 0;
+            border-radius: 5px;
+            display: flex;
+            justify-content: space-between;
+        }
+        .income {
+            background: white; /* Putih untuk pendapatan */
+        }
+        .expense {
+            background: white; /* Putih untuk pengeluaran */
+        }
+        .chart-container {
+            margin-top: 20px;
+            text-align: center;
+        }
+        canvas {
+            border-radius: 10px;
+        }
+        .legend {
+            display: flex;
+            justify-content: center;
+            flex-wrap: wrap;
+            margin-top: 10px;
+        }
+        .legend-item {
+            display: flex;
+            align-items: center;
+            margin: 5px 10px;
+            font-size: 14px;
+        }
+        .legend-color {
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            margin-right: 5px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Monthly Budget Tracker</h1> <!-- Teks diubah -->
+        <form id="transaction-form">
+            <input type="text" id="description" placeholder="Deskripsi (e.g., Makan Siang)" required>
+            <input type="number" id="amount" placeholder="Jumlah (e.g., 50000)" required>
+            <select id="type">
+                <option value="income">Pendapatan</option>
+                <option value="expense">Pengeluaran</option>
+            </select>
+            <select id="category">
+                <option value="makan">Makan</option>
+                <option value="tempat tinggal">Tempat Tinggal</option>
+                <option value="komunikasi">Komunikasi</option>
+                <option value="kesehatan">Kesehatan</option>
+                <option value="pendidikan">Pendidikan</option>
+                <option value="transport">Transport</option>
+                <option value="hiburan">Hiburan</option>
+                <option value="lainnya">Lainnya</option>
+            </select>
+            <button type="submit">Tambah Transaksi</button>
+        </form>
+        <div class="balance">
+            <p>Saldo: <span id="balance">0</span></p>
+            <p class="warning" id="warning">Peringatan: Pengeluaran melebihi anggaran!</p>
+        </div>
+        <div class="transactions">
+            <h2>Riwayat Transaksi</h2>
+            <ul id="transaction-list"></ul>
+        </div>
+        <div class="chart-container">
+            <h2>Grafik Alokasi Pendapatan</h2>
+            <canvas id="expense-chart" width="300" height="300"></canvas>
+            <div class="legend" id="legend"></div>
+        </div>
+    </div>
+
+    <script>
+        // Data penyimpanan (array untuk transaksi)
+        let transactions = JSON.parse(localStorage.getItem('transactions')) || [];
+        const budget = 1000000; // Anggaran bulanan (bisa diubah)
+
+        // Elemen DOM
+        const form = document.getElementById('transaction-form');
+        const balanceEl = document.getElementById('balance');
+        const warningEl = document.getElementById('warning');
+        const listEl = document.getElementById('transaction-list');
+        const canvas = document.getElementById('expense-chart');
+        const ctx = canvas.getContext('2d');
+        const legendEl = document.getElementById('legend');
+
+        // Fungsi untuk menambah transaksi
+        function addTransaction(description, amount, type, category) {
+            const transaction = {
+                id: Date.now(),
+                description,
+                amount: parseFloat(amount),
+                type,
+                category
+            };
+            transactions.push(transaction);
+            saveToLocalStorage();
+            updateUI();
+        }
+
+        // Fungsi untuk menghapus transaksi
+        function deleteTransaction(id) {
+            transactions = transactions.filter(t => t.id !== id);
+            saveToLocalStorage();
+            updateUI();
+        }
+
+        // Fungsi untuk menghitung total saldo (menggunakan perulangan)
+        function calculateTotal() {
+            let total = 0;
+            for (let i = 0; i < transactions.length; i++) { // Perulangan for
+                if (transactions[i].type === 'income') {
+                    total += transactions[i].amount;
+                } else {
+                    total -= transactions[i].amount;
+                }
+            }
+            return total;
+        }
+
+        // Fungsi untuk menghitung pengeluaran per kategori (menggunakan perulangan)
+        function calculateExpensesByCategory() {
+            const categories = {};
+            for (let i = 0; i < transactions.length; i++) { // Perulangan for
+                if (transactions[i].type === 'expense') {
+                    categories[transactions[i].category] = (categories[transactions[i].category] || 0) + transactions[i].amount;
+                }
+            }
+            return categories;
+        }
+
+        // Fungsi untuk menghitung total pendapatan
+        function calculateTotalIncome() {
+            let totalIncome = 0;
+            for (let i = 0; i < transactions.length; i++) { // Perulangan for
+                if (transactions[i].type === 'income') {
+                    totalIncome += transactions[i].amount;
+                }
+            }
+            return totalIncome;
+        }
+
+        // Fungsi untuk update UI
+        function updateUI() {
+            const total = calculateTotal();
+            balanceEl.textContent = total.toLocaleString('id-ID', { style: 'currency', currency: 'IDR' });
+
+            // Percabangan: Cek anggaran
+            const totalExpenses = transactions.filter(t => t.type === 'expense').reduce((sum, t) => sum + t.amount, 0);
+            if (totalExpenses > budget) { // Percabangan if-else
+                warningEl.style.display = 'block';
+            } else {
+                warningEl.style.display = 'none';
+            }
+
+            // Update daftar transaksi
+            listEl.innerHTML = '';
+            transactions.forEach(t => {
+                const li = document.createElement('li');
+                li.className = t.type; // Tambahkan kelas berdasarkan type (income atau expense)
+                li.innerHTML = `
+                    ${t.description} - ${t.amount.toLocaleString('id-ID', { style: 'currency', currency: 'IDR' })} (${t.category})
+                    <button onclick="deleteTransaction(${t.id})">Hapus</button>
+                `;
+                listEl.appendChild(li);
+            });
+
+            // Update grafik
+            drawChart();
+        }
+
+        // Fungsi untuk menggambar grafik pie dengan alokasi pendapatan
+        function drawChart() {
+            const totalIncome = calculateTotalIncome();
+            const categories = calculateExpensesByCategory();
+            const totalExpenses = Object.values(categories).reduce((a, b) => a + b, 0);
+            const remaining = totalIncome - totalExpenses;
+
+            // Data untuk pie chart: kategori pengeluaran + sisa pendapatan
+            const data = [];
+            const labels = [];
+            const colors = [];
+
+            // Warna spesifik sesuai permintaan
+            const colorMap = {
+                'makan': '#5784E6', // Biru
+                'tempat tinggal':'#FB9590', //Pink
+                'komunikasi': '#A88AED', //Ungu
+                'kesehatan':'#FFF9F0', // Milk Way
+                'pendidikan' : '#FFF1B5', // Cream
+                'hiburan': '#FFA500', // Orange
+                'transport': '#FF6384', // Merah muda (default)
+                'lainnya': '#4BC0C0', // Cyan (default)
+                'sisa': '#36A2EB' // Biru untuk sisa pendapatan
+            };
+
+            // Tambah kategori pengeluaran
+            for (const [category, amount] of Object.entries(categories)) {
+                if (amount > 0) {
+                    data.push(amount);
+                    labels.push(category);
+                    colors.push(colorMap[category] || '#FF6384');
+                }
+            }
+
+            // Tambah sisa pendapatan jika ada
+            if (remaining > 0) {
+                data.push(remaining);
+                labels.push('Sisa Pendapatan');
+                colors.push(colorMap['sisa']);
+            }
+
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            if (data.length === 0) return;
+
+            let total = data.reduce((a, b) => a + b, 0);
+            let startAngle = 0;
+            data.forEach((value, index) => {
+                const sliceAngle = (value / total) * 2 * Math.PI;
+                ctx.fillStyle = colors[index];
+                ctx.beginPath();
+                ctx.moveTo(150, 150);
+                ctx.arc(150, 150, 100, startAngle, startAngle + sliceAngle);
+                ctx.closePath();
+                ctx.fill();
+                startAngle += sliceAngle;
+            });
+
+            // Update legenda
+            legendEl.innerHTML = '';
+            labels.forEach((label, index) => {
+                const item = document.createElement('div');
+                item.className = 'legend-item';
+                item.innerHTML = `
+                    <div class="legend-color" style="background-color: ${colors[index]};"></div>
+                    ${label}: ${(data[index] / total * 100).toFixed(1)}%
+                `;
+                legendEl.appendChild(item);
+            });
+        }
+
+        // Fungsi untuk simpan ke localStorage
+        function saveToLocalStorage() {
+            localStorage.setItem('transactions', JSON.stringify(transactions));
+        }
+
+        // Event listener untuk form
+        form.addEventListener('submit', (e) => {
+            e.preventDefault();
+            const description = document.getElementById('description').value;
+            const amount = document.getElementById('amount').value;
+            const type = document.getElementById('type').value;
+            const category = document.getElementById('category').value;
+            addTransaction(description, amount, type, category);
+            form.reset();
+        });
+
+        // Inisialisasi
+        updateUI();
+    </script> 
+</body>
+</html>
